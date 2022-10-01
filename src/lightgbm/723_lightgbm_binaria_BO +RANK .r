@@ -43,7 +43,7 @@ hs <- makeParamSet(
 #  muy pronto esto se leera desde un archivo formato .yaml
 PARAM  <- list()
 
-PARAM$experimento  <- "HT7231 -BoconRank"
+PARAM$experimento  <- "HT7231 -BoconRankv2"
 
 PARAM$input$dataset       <- "./datasets/competencia2_2022.csv.gz"
 PARAM$input$training      <- c( 202103 )
@@ -196,6 +196,12 @@ dataset  <- fread( PARAM$input$dataset )
 
 #creo variables nuevas
 
+
+##------------------------------------------------------------------------------
+
+
+#NUEVOS FEATURES
+
 dataset[,caja_ahorro_total := mcaja_ahorro + mcaja_ahorro_dolares + mcaja_ahorro_adicional + mcaja_ahorro_adicional]
 dataset[,saldo_total := mcuenta_corriente + mcaja_ahorro + mcaja_ahorro_dolares + mcaja_ahorro_adicional + mcaja_ahorro_adicional]
 dataset[,inversiones_total := mplazo_fijo_dolares+mplazo_fijo_pesos + minversion1_pesos + minversion1_dolares + minversion2]
@@ -225,7 +231,8 @@ dataset[,inversion_antiguedad:= inversiones_total /cliente_antiguedad]
 dataset[,antiguedad_relativa := (cliente_antiguedad/12)/cliente_edad]
 dataset[,seguros:= cseguro_vida+cseguro_auto+cseguro_vivienda+cseguro_accidentes_personales]
 
-#divido columnas según positivos y negativos
+
+#DIVISIÓN DATASET Y ELIMINACION DE COLUMNAS MODIFICADAS
 
 campos_procesar <- setdiff( colnames(dataset), "clase_ternaria" )
 
@@ -237,25 +244,71 @@ for( campo in campos_procesar )
     dataset[, paste0(campo) := NULL] 
   }
 }
+dataset[is.na(dataset)]<-0
 
 retocarR<-c("financiamiento_total_saldo_total_neg","financiamiento_corto_saldo_total_neg","mcuentas_saldo_neg","saldo_total_neg","descubierto","mcuenta_corriente_neg","prestamos","mprestamos_personales",
-            "prestamos_saldo_total_neg","mcomisiones_otras_pos","ccomisiones_otras","mcomisiones_pos","mpasivos_margen_pos", "ccomisiones_mantenimiento", "mpayroll",
-            "Master_mfinanciacion_limite","prestamos_caja_ahorro_pos","Visa_mpagominimo","Visa_msaldototal_pos",
+            "prestamos_saldo_total_neg","mcomisiones_otras_pos","mcomisiones_pos","mpasivos_margen_pos", "ccomisiones_mantenimiento", "mpayroll",
+            "Master_mfinanciacion_limite","prestamos_caja_ahorro_pos","Visa_mpagominimo","Visa_msaldototal_pos","financiamiento_corto", "financiamiento_corto_caja_ahorro_pos","mrentabilidad_annual_neg",
             "financiamiento_total_saldo_total_pos","mcaja_ahorro_pos","Visa_msaldopesos_pos","financiamiento_corto_saldo_total_pos","prestamos_saldo_total_pos","mtarjeta_visa_consumo",
-            "consumo_tarjeta_total","mcuentas_saldo_pos","Visa_mfinanciacion_limite","Visa_Finiciomora","ccajas_depositos","chomebanking_transacciones","financiamiento_total_ahorro_pos") #p64
+            "consumo_tarjeta_total","mcuentas_saldo_pos","Visa_mfinanciacion_limite","chomebanking_transacciones",
+            "financiamiento_total_ahorro_pos", "mactivos_margen_pos","financiamiento_total","mrentabilidad_annual_pos", "Visa_mconsumospesos_pos","Visa_mconsumototal_pos",
+            "mtransferencias_emitidas","mtarjeta_master_consumo","mprestamos_hipotecarios","mpasivos_margen_neg","inversiones_saldo_total_neg","caja_ahorro_total_neg",
+            "mcaja_ahorro_dolares_pos","Master_mpagominimo","Master_msaldototal_pos","Master_mconsumospesos_pos","Master_mconsumototal_pos",
+            "Master_msaldopesos_pos","mcuenta_debitos_automaticos") #p64
 
-#RETOCAR CON RANK SOLO AQUELLAS VARIABLES MONETARIAS
+#RETOCAR CON RANK SEGUN MESES SOLO AQUELLAS VARIABLES MONETARIAS
+
+dataset1<-dataset[foto_mes == 202103]
+dataset2<-dataset[foto_mes == 202105]
+
 
 for( campo in retocarR )
+  
 {
-  dataset[, paste0("auto_r_", campo, sep = "") := (frankv(dataset, cols = campo) - 1) / (length(dataset[, get(campo)]) - 1)] # rankeo entre 0 y 1
-  dataset[, paste0(campo) := NULL]  # elimino atributos nuevos
+  dataset1[, paste0("auto_r_", campo, sep = "") := (frankv(dataset1, cols = campo) - 1) / (length(dataset1[, get(campo)]) - 1)] # rankeo entre 0 y 1
+  dataset1[, paste0(campo) := NULL]  # elimino atributos nuevos
+  
+}
+
+for( campo in retocarR )
+  
+{
+  dataset2[, paste0("auto_r_", campo, sep = "") := (frankv(dataset2, cols = campo) - 1) / (length(dataset2[, get(campo)]) - 1)] # rankeo entre 0 y 1
+  dataset2[, paste0(campo) := NULL]  # elimino atributos nuevos
   
 }
 
 
+#https://www.r-bloggers.com/2021/12/how-to-use-the-scale-function-in-r/
+#scale
+
+#retocarZ <- c("ccajas_consultas","ccajas_otras","ccomisiones_otras","ccajas_depositos","Master_fultimo_cierre")
 
 
+#for( campo in retocarZ )
+
+#{
+#dataset1[, paste0("auto_z_", campo, sep = "") := scale(get(campo),center=TRUE, scale = TRUE)] # rankeo entre 0 y 1
+#dataset1[, paste0(campo) := NULL]  # elimino atributos nuevos
+
+#}
+
+
+#for( campo in retocarZ )
+
+#{
+#dataset2[, paste0("auto_z_", campo, sep = "") := scale(get(campo),center=TRUE, scale = TRUE)] # rankeo entre 0 y 1
+#dataset2[, paste0(campo) := NULL]  # elimino atributos nuevos
+
+#}
+
+
+
+
+
+dataset <- rbind(dataset1,dataset2)
+
+#-------------------------------------------------------------------------------------------
 
 #creo la carpeta donde va el experimento
 # HT  representa  Hiperparameter Tuning
