@@ -48,6 +48,26 @@ dataset  <- fread("./datasets/competencia2_2022.csv.gz")
 dataset  <- dataset[  foto_mes %in% c( 202103, 202105 ) ]
 
 #creo la clase_binaria SI={ BAJA+1, BAJA+2 }    NO={ CONTINUA }
+dataset[ foto_mes==202103, 
+         clase_binaria :=  ifelse( clase_ternaria=="CONTINUA", "NO", "SI" ) ]
+
+dataset[ foto_mes==202105, 
+         clase_ternaria :=  "CONTINUA" ]
+
+
+##------------------------------------------------------------------------------
+
+#CAMPOS NO-MONETARIOS
+require(readODS)
+
+diccionario <- read_ods("./TareasHogar/DiccionarioDatos.ods")
+
+dic<-data.table(diccionario)
+camposnomonet <-dic[unidad!= "pesos", campo]
+
+
+
+#NUEVOS FEATURES
 
 dataset[,caja_ahorro_total := mcaja_ahorro + mcaja_ahorro_dolares + mcaja_ahorro_adicional + mcaja_ahorro_adicional]
 dataset[,saldo_total := mcuenta_corriente + mcaja_ahorro + mcaja_ahorro_dolares + mcaja_ahorro_adicional + mcaja_ahorro_adicional]
@@ -79,40 +99,9 @@ dataset[,antiguedad_relativa := (cliente_antiguedad/12)/cliente_edad]
 dataset[,seguros:= cseguro_vida+cseguro_auto+cseguro_vivienda+cseguro_accidentes_personales]
 
 
-fechas<- c(202103,202105)
-
-for (fechas in fechas){
-  
-
-
-
-
-
-(sapply(DT[N],sum) = 0)
-
-length(colnames(dataset[,.SD<0]))
-dataset[,which(dataset[,.SD<0]==TRUE)]
-
-colnames(dataset[,lapply(.SD,function(x) x<0)])
-
-dataset[,any(.SD<0)]
-
-apply(dataset, 1, function(x) names(which(x >0)))
-
-dataset[,dataset[,.SD<0]]
-
-dataset[,(function(x) x<0)(.SD)]
-
-for( campo in campos_procesar )
-{
-  if(  dataset[ get(campo) < 0, .N ]  > 0 ) {
-    dataset[   , paste0( campo, "_neg" ) := ifelse( get(campo)< 0, get(campo), 0 ) ]
-    dataset[   , paste0( campo, "_pos" ) := ifelse( get(campo)> 0, get(campo), 0 ) ]
-  }
-}
-
-
 #DIVISIÓN DATASET Y ELIMINACION DE COLUMNAS MODIFICADAS
+
+campos_procesar <- setdiff( colnames(dataset), "clase_ternaria" )
 
 for( campo in campos_procesar )
 {
@@ -122,38 +111,77 @@ for( campo in campos_procesar )
     dataset[, paste0(campo) := NULL] 
   }
 }
-ncol(dataset)
-
 dataset[is.na(dataset)]<-0
 
 
-sapply(dataset, function(x) sum(is.infinite(x)))
+atributosRank<-setdiff(colnames(dataset), c(camposnomonet,"clase_ternaria","clase_binaria"))
 
-dataset[ foto_mes==202103, 
-         clase_binaria :=  ifelse( clase_ternaria=="CONTINUA", "NO", "SI" ) ]
 
-dataset[ foto_mes==202105, 
-         clase_ternaria :=  "CONTINUA" ]
 
-dataset[dataset[.SD==-Inf,.N]]
+retocarR<-c("financiamiento_total_saldo_total_neg","financiamiento_corto_saldo_total_neg","mcuentas_saldo_neg","saldo_total_neg","descubierto","mcuenta_corriente_neg","prestamos","mprestamos_personales",
+            "prestamos_saldo_total_neg","mcomisiones_otras_pos","mcomisiones_pos","mpasivos_margen_pos", "ccomisiones_mantenimiento", "mpayroll",
+            "Master_mfinanciacion_limite","prestamos_caja_ahorro_pos","Visa_mpagominimo","Visa_msaldototal_pos","financiamiento_corto", "financiamiento_corto_caja_ahorro_pos","mrentabilidad_annual_neg",
+            "financiamiento_total_saldo_total_pos","mcaja_ahorro_pos","Visa_msaldopesos_pos","financiamiento_corto_saldo_total_pos","prestamos_saldo_total_pos","mtarjeta_visa_consumo",
+            "consumo_tarjeta_total","mcuentas_saldo_pos","Visa_mfinanciacion_limite","chomebanking_transacciones",
+            "financiamiento_total_ahorro_pos", "mactivos_margen_pos","financiamiento_total","mrentabilidad_annual_pos", "Visa_mconsumospesos_pos","Visa_mconsumototal_pos",
+            "mtransferencias_emitidas","mtarjeta_master_consumo","mprestamos_hipotecarios","mpasivos_margen_neg","inversiones_saldo_total_neg","caja_ahorro_total_neg",
+            "mcaja_ahorro_dolares_pos","Master_mpagominimo","Master_msaldototal_pos","Master_mconsumospesos_pos","Master_mconsumototal_pos",
+            "Master_msaldopesos_pos","mcuenta_debitos_automaticos") #p64
 
-campos_procesar
+#RETOCAR CON RANK SEGUN MESES SOLO AQUELLAS VARIABLES MONETARIAS
 
-camposprueba<-colnames(dataset)
+dataset1<-dataset[foto_mes == 202103]
+dataset2<-dataset[foto_mes == 202105]
 
-camposprueba
 
-lista<- list()
-for( campo in camposprueba)
+for( campo in atributosRank )
+  
 {
-  if(  dataset[ get(campo) < 0, .N ]  > 0 ) {
-    lista<-append(lista,campo)
-  }
+  dataset1[, paste0("auto_r_", campo, sep = "") := (frankv(dataset1, cols = campo) - 1) / (length(dataset1[, get(campo)]) - 1)] # rankeo entre 0 y 1
+  dataset1[, paste0(campo) := NULL]  # elimino atributos nuevos
+  
 }
 
-campos_positivos <- setdiff( colnames(dataset), lista )
+for( campo in atributosRank )
+  
+{
+  dataset2[, paste0("auto_r_", campo, sep = "") := (frankv(dataset2, cols = campo) - 1) / (length(dataset2[, get(campo)]) - 1)] # rankeo entre 0 y 1
+  dataset2[, paste0(campo) := NULL]  # elimino atributos nuevos
+  
+}
 
-length(campos_positivos)
+
+#https://www.r-bloggers.com/2021/12/how-to-use-the-scale-function-in-r/
+#scale
+
+#retocarZ <- c("ccajas_consultas","ccajas_otras","ccomisiones_otras","ccajas_depositos","Master_fultimo_cierre")
+
+
+#for( campo in retocarZ )
+
+#{
+#dataset1[, paste0("auto_z_", campo, sep = "") := scale(get(campo),center=TRUE, scale = TRUE)] # rankeo entre 0 y 1
+#dataset1[, paste0(campo) := NULL]  # elimino atributos nuevos
+
+#}
+
+
+#for( campo in retocarZ )
+
+#{
+#dataset2[, paste0("auto_z_", campo, sep = "") := scale(get(campo),center=TRUE, scale = TRUE)] # rankeo entre 0 y 1
+#dataset2[, paste0(campo) := NULL]  # elimino atributos nuevos
+
+#}
+
+
+
+
+
+dataset <- rbind(dataset1,dataset2)
+
+
+
 
 # Entreno el modelo
 # utilizo los mejores hiperparametros encontrados en una Bayesian Optimizationcon 5-fold Cross Validation
@@ -170,15 +198,14 @@ campos_modelo  <- names( modelo$variable.importance )
 campos_buenos  <- c( campos_modelo,  setdiff( colnames(dataset), campos_modelo ) )
 campos_buenos  <-  setdiff(  campos_buenos,  c( "foto_mes","clase_ternaria","clase_binaria" ) )
 
-#prediccion  <- predict( modelo )
 
 dir.create( "./exp/",  showWarnings = FALSE ) 
 dir.create( "./exp/DR6130/", showWarnings = FALSE )
 setwd("./exp/DR6130/")
 
 
-
-pdf("03_05_soloNVDD-recortada+rank.pdf")
+dataset[is.na(dataset)]<-0
+pdf("03_05_solo_rankanual_v6.pdf")
 
 for( campo in  campos_buenos )
 {
@@ -192,45 +219,4 @@ for( campo in  campos_buenos )
 }
 
 dev.off()
-
-####
-
-#DIVISIÓN DATASET Y ELIMINACION DE COLUMNAS MODIFICADAS
-
-campos_procesar <- setdiff( colnames(dataset), "clase_ternaria" )
-
-for( campo in campos_procesar )
-{
-  if(  dataset[ get(campo) < 0, .N ]  > 0 ) {
-    dataset[   , paste0( campo, "_neg" ) := ifelse( get(campo)< 0, get(campo), 0 ) ]
-    dataset[   , paste0( campo, "_pos" ) := ifelse( get(campo)> 0, get(campo), 0 ) ]
-    dataset[, paste0(campo) := NULL] 
-  }
-}
-
-
-retocarR<-c("financiamiento_total_saldo_total_neg","financiamiento_corto_saldo_total_neg","mcuentas_saldo_neg","saldo_total_neg","descubierto","mcuenta_corriente_neg","prestamos","mprestamos_personales",
-           "prestamos_saldo_total_neg","mcomisiones_otras_pos","ccomisiones_otras","mcomisiones_pos","mpasivos_margen_pos", "ccomisiones_mantenimiento", "mpayroll",
-           "Master_mfinanciacion_limite","prestamos_caja_ahorro_pos","Visa_mpagominimo","Visa_msaldototal_pos",
-           "financiamiento_total_saldo_total_pos","mcaja_ahorro_pos","Visa_msaldopesos_pos","financiamiento_corto_saldo_total_pos","prestamos_saldo_total_pos","mtarjeta_visa_consumo",
-           "consumo_tarjeta_total","mcuentas_saldo_pos","Visa_mfinanciacion_limite","Visa_Finiciomora","ccajas_depositos","chomebanking_transacciones",
-           "Master_Finiciomora","financiamiento_total_ahorro_pos") #p64
-
-#RETOCAR CON RANK SOLO AQUELLAS VARIABLES MONETARIAS
-
-for( campo in retocar )
-{
-    dataset[, paste0("auto_r_", campo, sep = "") := (frankv(dataset, cols = campo) - 1) / (length(dataset[, get(campo)]) - 1)] # rankeo entre 0 y 1
-    dataset[, paste0(campo) := NULL]  # elimino atributos nuevos
-
-}
-
-#https://www.r-bloggers.com/2021/12/how-to-use-the-scale-function-in-r/
-#scale
-
-retocarZ <- c("ccajas_consultas","ccajas_transacciones","ccajas_otras","Master_fultimo_cierre")
-
-
-
-
 
