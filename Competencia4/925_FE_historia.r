@@ -19,14 +19,15 @@ require("lightgbm")
 
 #Parametros del script
 PARAM  <- list()
-PARAM$experimento <- "FE9250"
+PARAM$experimento <- "FE9250_RF_R0_L36_T36"
 
-PARAM$exp_input  <- "DR9141"
+PARAM$exp_input  <- "DR9141_RF_R0"
 
 PARAM$lag1  <- TRUE
-PARAM$lag2  <- FALSE
+PARAM$lag2  <- TRUE
+PARAM$lag3 <- TRUE
 PARAM$Tendencias  <- TRUE
-PARAM$RandomForest  <- FALSE          #No se puede poner en TRUE para la entrega oficial de la Tercera Competencia
+PARAM$RandomForest  <- TRUE          #No se puede poner en TRUE para la entrega oficial de la Tercera Competencia
 PARAM$CanaritosAsesinos  <- FALSE
 # FIN Parametros del script
 
@@ -359,7 +360,19 @@ if( PARAM$lag2 )
     dataset[ , paste0(vcol, "_delta2") := get(vcol)  - get(paste0( vcol, "_lag2"))  ]
   }
 }
-
+if( PARAM$lag3 )
+{
+  #creo los campos lags de orden 3
+  dataset[ , paste0( cols_lagueables, "_lag3") := shift(.SD, 3, NA, "lag"), 
+           by= numero_de_cliente, 
+           .SDcols= cols_lagueables ]
+  
+  #agrego los delta lags de orden 3
+  for( vcol in cols_lagueables )
+  {
+    dataset[ , paste0(vcol, "_delta3") := get(vcol)  - get(paste0( vcol, "_lag3"))  ]
+  }
+}
 
 #--------------------------------------
 #agrego las tendencias
@@ -374,12 +387,26 @@ if( PARAM$Tendencias )
                       cols= cols_lagueables,
                       ventana=   6,      # 6 meses de historia
                       tendencia= TRUE,
-                      minimo=    FALSE,
-                      maximo=    FALSE,
+                      minimo=    TRUE,
+                      maximo=    TRUE,
                       promedio=  TRUE,
-                      ratioavg=  FALSE,
-                      ratiomax=  FALSE  )
+                      ratioavg=  TRUE,
+                      ratiomax=  TRUE  )
 }
+
+if( PARAM$Tendencias )
+{
+  TendenciaYmuchomas( dataset, 
+                      cols= cols_lagueables,
+                      ventana=   3,      # 6 meses de historia
+                      tendencia= TRUE,
+                      minimo=    TRUE,
+                      maximo=    TRUE,
+                      promedio=  TRUE,
+                      ratioavg=  TRUE,
+                      ratiomax=  TRUE  )
+}
+
 
 #------------------------------------------------------------------------------
 #Agrego variables a partir de las hojas de un Random Forest
@@ -401,7 +428,7 @@ if( PARAM$RandomForest )
 if( PARAM$CanaritosAsesinos )
 {
   ncol( dataset )
-  CanaritosAsesinos( canaritos_ratio = 0.3 )
+  CanaritosAsesinos( canaritos_ratio = 0.15 )
   ncol( dataset )
 }
 
